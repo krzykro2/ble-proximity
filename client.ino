@@ -91,7 +91,8 @@ const int FRESH_CONNECTED = 1;
 const int DISCONNECTED = 2;
 int state = UNCERTAIN;
 void setup() {
-  pinMode(6, OUTPUT);
+  pinMode(13, OUTPUT);
+  digitalWrite(13, 0);
   pinMode(blueLED, OUTPUT);
   ble.begin(9600);
   Serial.begin(9600);
@@ -352,7 +353,6 @@ void loop() {
     work();
   }
   analogWrite(blueLED, lamp());
-  analogWrite(6, 255);
 }
 
 void work() {
