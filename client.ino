@@ -1,7 +1,7 @@
 #include <SoftwareSerial.h>
 #include <LowPower.h>
 
-SoftwareSerial ble(5, 8); // RX, TX
+SoftwareSerial ble(8, 5); // TX, RX
 
 #define DEBUG 0
 
@@ -91,8 +91,7 @@ const int FRESH_CONNECTED = 1;
 const int DISCONNECTED = 2;
 int state = UNCERTAIN;
 void setup() {
-  pinMode(13, OUTPUT);
-  digitalWrite(13, 0);
+  pinMode(6, OUTPUT);
   pinMode(blueLED, OUTPUT);
   ble.begin(9600);
   Serial.begin(9600);
@@ -353,6 +352,7 @@ void loop() {
     work();
   }
   analogWrite(blueLED, lamp());
+  analogWrite(6, 255);
 }
 
 void work() {
