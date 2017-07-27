@@ -1,7 +1,7 @@
 #include <SoftwareSerial.h>
 #include <LowPower.h>
 
-SoftwareSerial ble(11, 12); // RX, TX
+SoftwareSerial ble(5, 8); // RX, TX
 
 #define DEBUG 0
 
@@ -36,7 +36,7 @@ String addr;
 
 #define FAIL "FAIL"
 
-int blueLED = 3;
+int blueLED = 6;
 int lampStrength = 0;
 
 void soft_reset() {
