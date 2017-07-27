@@ -11,7 +11,7 @@ SoftwareSerial ble(8, 5); // TX, RX
 #define ACTIVE_WAIT_INTERVAL 10
 #define CLIENT_SLEEP_TIME SLEEP_8S
 #define SERVER_SLEEP_TIME SLEEP_8S
-#define BLE_DELAY 500
+#define BLE_DELAY 1000
 
 //  0  --> 35
 // .25 --> 45
@@ -44,7 +44,7 @@ void soft_reset() {
 }
 
 void debug(String s) {
-  Serial.println(s);
+  //Serial.println(s);
 }
 void debug(String name, long val) {
   String result = name + ": " + val;
@@ -95,12 +95,12 @@ void setup() {
   digitalWrite(13, 0);
   pinMode(blueLED, OUTPUT);
   ble.begin(9600);
-  Serial.begin(9600);
+  //Serial.begin(9600);
   delay(BLE_DELAY);
   refreshFade();
   sendSet("AT+POWE", "2");
   if (!check_identity()) {
-    Serial.println("la la la");
+    //Serial.println("la la la");
     soft_reset();
   }
   sendSet("AT+IMME", is_server() ? "1" : "0");
@@ -184,7 +184,7 @@ void client() {
   if (result != FAIL) {
     setSignal(toInt(result));
   }
-  Serial.println(getSignal());
+  //Serial.println(getSignal());
   if (getSignal() == 0) {
     sleep(CLIENT_SLEEP_TIME);
   }
@@ -219,7 +219,7 @@ void readRSSI() {
     }
     // Receiving any rssi is a signal of at least perceivable 5%.
     int signal = map(-rssi, -MAX_RSSI, -MIN_RSSI, 0, 240) + 15;
-    Serial.println(rssi);
+    //Serial.println(rssi);
     setSignal(signal);
     sprintf(buffer, "BS%03d", signal);
     toBle(String(buffer));
