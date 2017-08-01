@@ -25,6 +25,11 @@ SoftwareSerial ble(8, 5); // TX, RX
 #define MAX_RSSI 95 
 #define SMOOTHING 10
 
+const int UNCERTAIN = 0;
+const int CONNECTED_AS_SERVER = 1;
+const int CONNECTED_AS_CLIENT = 2;
+int state = UNCERTAIN;
+
 char buffer[50];
 
 #define N 2
@@ -78,57 +83,47 @@ const int my_pair() {
   return which_am_i() + (is_server() ? 1 : -1);
 }
 boolean is_server() {
+  if (state == CONNECTED_AS_SERVER) return true;
+  if (which_am_i() == -1) return false;
   return which_am_i() % 2 == 0;
 }
 boolean is_client() {
-  return !is_server();
+  if (state == CONNECTED_AS_CLIENT) return true;
+  if (which_am_i() == -1) return false;
+  return which_am_i() % 2 == 1;
 }
 // END OF WHO ARE WE
 
 // SETUP
-const int UNCERTAIN = 0;
-const int FRESH_CONNECTED = 1;
-const int DISCONNECTED = 2;
-int state = UNCERTAIN;
 void setup() {
   pinMode(13, OUTPUT);
   digitalWrite(13, 0);
   pinMode(blueLED, OUTPUT);
   ble.begin(9600);
   //Serial.begin(9600);
-  delay(BLE_DELAY);
   refreshFade();
-  sendSet("AT+POWE", "2");
-  if (!check_identity()) {
-    //Serial.println("la la la");
-    soft_reset();
+  delay(BLE_DELAY);
+  readRSSI();
+  check_identity();
+  if (which_am_i() == -1) {
+    // If we don't know who we are, we can't do much.
+    return;
   }
+  sendSet("AT+POWE", "2");
   sendSet("AT+IMME", is_server() ? "1" : "0");
   // What happens in connected state. Remote control.
   sendSet("AT+MODE", is_server() ? "0" : "2");
   // LED
   sendSet("AT+PIO1", DEBUG ? "0" : "1");
 }
+// Can only be called after readRSSI.
 bool check_identity() {
-  if (!really_disconnected()) {
-    return false;
-  }
+  if (state == CONNECTED_AS_SERVER) return false;
   toBle("AT+ADDR?");
   addr = consumeAnswer("OK+ADDR:", 12, TIMEOUT);
   setName();
   sendSet("AT+ROLE", is_server() ? "1" : "0");
   return which_am_i() != -1;
-}
-bool really_disconnected() {
-  if (is_server()) {
-    // We need to make sure we are not already connected.
-    readRSSI();
-    if (state == FRESH_CONNECTED) {
-      // Sending AT+ commands is a bad idea.
-      return false;
-    }
-  }
-  return true;
 }
 void sendSet(String prefix, String value) {
   String result = prefix + value;
@@ -149,12 +144,17 @@ void wake_up() {
     ble_wake();
     sleeping = false;
   }
-  if (really_disconnected()) {
+  readRSSI();
+  if (state != CONNECTED_AS_SERVER) {
     // This might change due to sleeping
     sendSet("AT+ROLE", is_server() ? "1" : "0");
   }
 }
+// You can only go to sleep if you know who you are. Otherwise just reset.
 void sleep(period_t duration) {
+  if (!is_client() && !is_server()) {
+    soft_reset();
+  }
   // Scary shit.
   sendSet("AT+ROLE", "0");
   if (!ble_sleep()) {
@@ -163,7 +163,6 @@ void sleep(period_t duration) {
   // Don't ask me.
   delay(BLE_DELAY);
   sleeping = true;
-  //debug("Calling ard_sleep");
   ard_sleep(duration);
 }
 bool ble_sleep() {
@@ -179,14 +178,16 @@ bool ble_wake() {
 }
 // END OF SLEEP
 // CLIENT
+// Can be called by potential server, when we don't know who we are.
 void client() {
   String result = consumeAnswer("BS", 3, TIMEOUT);
   if (result != FAIL) {
+    state = CONNECTED_AS_CLIENT;
     setSignal(toInt(result));
-  }
-  //Serial.println(getSignal());
-  if (getSignal() == 0) {
-    sleep(CLIENT_SLEEP_TIME);
+  } else {
+    if (getSignal() == 0) {
+      sleep(CLIENT_SLEEP_TIME);
+    }
   }
 }
 // END OF CLIENT
@@ -194,22 +195,22 @@ void client() {
 // SERVER
 void connect() {
   String command = "AT+CON" + MACS[my_pair()];
-  debug(command);
   toBle(command);
   String result = consumeAnswer("OK+CONN", 1, TIMEOUT);
   if (result == "A") {
-    state = FRESH_CONNECTED;
+    state = CONNECTED_AS_SERVER;
   } else {
     state = UNCERTAIN;
   }
 }
+// Can be done under client, will set state to UNCERTAIN.
 void readRSSI() {
   toBle("AT+RSSI?");
   String result = consumeAnswer("OK+Get:-", 2, TIMEOUT);
   if (result == FAIL) {
     state = UNCERTAIN;
   } else {
-    state = FRESH_CONNECTED;
+    state = CONNECTED_AS_SERVER;
     int rssi = toInt(result);
     if (rssi < MIN_RSSI) {
       rssi = MIN_RSSI;
@@ -225,12 +226,9 @@ void readRSSI() {
     toBle(String(buffer));
   }
 }
-void serve() {
-  if (state == UNCERTAIN || state == FRESH_CONNECTED) {
-    readRSSI();
-  }
-  if (state == UNCERTAIN || state == DISCONNECTED) {
-    // Lepiej dmuchac na zimne.
+// Can only be called if we are certain that we are the server.
+void connectOrSleep() {
+  if (state == UNCERTAIN) {
     connect();
   }
   if (state == UNCERTAIN && getSignal() == 0) {
@@ -343,6 +341,7 @@ int lamp() {
 // END OF VISUAL
 
 void loop() {
+  state = UNCERTAIN;
   if (sleeping) {
     wake_up();
   }
@@ -356,10 +355,13 @@ void loop() {
 }
 
 void work() {
-  if (is_server()) {
-    serve();
+  if (!is_client()) {
+    // Only try RSSI, when we are certain we are not the client to save cycles.
+    readRSSI();
   }
-  if (is_client()) {
+  if (is_server()) {
+    connectOrSleep();
+  } else {
     client();
   }
   // Spend the rest of the time cleaning up shit.
