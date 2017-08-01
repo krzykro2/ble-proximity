@@ -49,7 +49,7 @@ void soft_reset() {
 }
 
 void debug(String s) {
-  //Serial.println(s);
+  Serial.println(s);
 }
 void debug(String name, long val) {
   String result = name + ": " + val;
@@ -100,7 +100,7 @@ void setup() {
   digitalWrite(13, 0);
   pinMode(blueLED, OUTPUT);
   ble.begin(9600);
-  //Serial.begin(9600);
+  Serial.begin(9600);
   refreshFade();
   delay(BLE_DELAY);
   readRSSI();
@@ -121,6 +121,9 @@ bool check_identity() {
   if (state == CONNECTED_AS_SERVER) return false;
   toBle("AT+ADDR?");
   addr = consumeAnswer("OK+ADDR:", 12, TIMEOUT);
+  if (addr == FAIL) {
+    return false;
+  }
   setName();
   sendSet("AT+ROLE", is_server() ? "1" : "0");
   return which_am_i() != -1;
